@@ -93,10 +93,17 @@ class BedReader(object):
 
 
 def _to_dict(df, dtype=None):
-    return {
-        c: df[c].to_dask_array(lengths=True).astype(dtype[c] if dtype else df[c].dtype)
-        for c in df
-    }
+    arrs = {}
+    for c in df:
+        a = df[c].to_dask_array(lengths=True)
+        dt = df[c].dtype
+        if dtype:
+            dt = dtype[c]
+        if dt in ["U", "S"]:
+            # Compute fixed-length string dtype for array
+            dt = a.astype(dt).compute().dtype
+        arrs[c] = a.astype(dt)
+    return arrs
 
 
 def read_fam(path: PathType, sep: str = " ") -> DataFrame:
@@ -110,8 +117,8 @@ def read_fam(path: PathType, sep: str = " ") -> DataFrame:
         v = v.where(v.isin(codes), np.nan)
         return v.fillna(-1).astype("int8")
 
-    df["paternal_id"] = df["paternal_id"].where(df["paternal_id"] != "0", None)
-    df["maternal_id"] = df["maternal_id"].where(df["maternal_id"] != "0", None)
+    df["paternal_id"] = df["paternal_id"].where(df["paternal_id"] != "0", "")
+    df["maternal_id"] = df["maternal_id"].where(df["maternal_id"] != "0", "")
     df["sex"] = coerce_code(df["sex"], [1, 2])
     df["phenotype"] = coerce_code(df["phenotype"], [1, 2])
 
@@ -122,7 +129,7 @@ def read_bim(path: PathType, sep: str = "\t") -> DataFrame:
     # See: https://www.cog-genomics.org/plink/1.9/formats#bim
     names = [f[0] for f in BIM_FIELDS]
     df = dd.read_csv(str(path), sep=sep, names=names, dtype=BIM_DF_DTYPE)
-    df["contig"] = df["contig"].where(df["contig"] != "0", None)
+    df["contig"] = df["contig"].where(df["contig"] != "0", "")
     return df
 
 
